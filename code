@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOODWAVE — Playlist Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Syne+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --border: #1e1e2e;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --accent: #1DB954;
+    --accent2: #ff6b6b;
+
+    /* Mood colors */
+    --c-happy:    #f7c948;
+    --c-chill:    #5ce1e6;
+    --c-sad:      #8b9fcf;
+    --c-hype:     #ff6b6b;
+    --c-focus:    #a8ff78;
+    --c-romantic: #ff85c2;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── GRAIN OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999;
+  }
+
+  /* ── HERO ── */
+  header {
+    padding: 3rem 2rem 1.5rem;
+    text-align: center;
+    position: relative;
+  }
+  .logo {
+    font-size: clamp(2.5rem, 8vw, 5rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    background: linear-gradient(135deg, #1DB954 0%, #5ce1e6 60%, #ff85c2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .tagline {
+    margin-top: .5rem;
+    color: var(--muted);
+    font-family: 'Syne Mono', monospace;
+    font-size: .8rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+  }
+
+  /* ── AUTH SECTION ── */
+  #auth-section {
+    max-width: 480px;
+    margin: 3rem auto;
+    padding: 2.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 1.5rem;
+    text-align: center;
+  }
+  #auth-section h2 { font-size: 1.4rem; margin-bottom: .75rem; }
+  #auth-section p { color: var(--muted); font-size: .9rem; line-height: 1.6; margin-bottom: 1.5rem; }
+
+  /* ── MAIN APP ── */
+  #app-section { display: none; max-width: 900px; margin: 0 auto; padding: 0 1.5rem 4rem; }
+
+  /* ── USER BAR ── */
+  .user-bar {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    margin-bottom: 2.5rem;
+  }
+  .user-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--border); }
+  .user-name { font-weight: 700; font-size: .95rem; }
+  .user-sub { color: var(--muted); font-size: .75rem; }
+  .logout-btn {
+    margin-left: auto;
+    background: none; border: 1px solid var(--border);
+    color: var(--muted); padding: .4rem .9rem;
+    border-radius: .5rem; cursor: pointer; font-family: 'Syne', sans-serif;
+    font-size: .8rem; transition: all .2s;
+  }
+  .logout-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ── STEP LABELS ── */
+  .step-label {
+    font-family: 'Syne Mono', monospace;
+    font-size: .7rem; letter-spacing: .2em; color: var(--muted);
+    text-transform: uppercase; margin-bottom: .75rem;
+  }
+
+  /* ── MOOD GRID ── */
+  .mood-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .75rem;
+    margin-bottom: 2.5rem;
+  }
+  @media (max-width: 500px) { .mood-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .mood-card {
+    padding: 1.25rem 1rem;
+    border: 2px solid var(--border);
+    border-radius: 1rem;
+    background: var(--surface);
+    cursor: pointer;
+    text-align: center;
+    transition: all .25s;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+  }
+  .mood-card::after {
+    content: '';
+    position: absolute; inset: 0;
+    opacity: 0;
+    transition: opacity .25s;
+    border-radius: inherit;
+  }
+  .mood-card:hover { transform: translateY(-3px); }
+  .mood-card.selected { border-color: var(--mood-color); }
+  .mood-card.selected::after { opacity: .12; background: var(--mood-color); }
+
+  .mood-icon { font-size: 2rem; margin-bottom: .4rem; }
+  .mood-name { font-weight: 700; font-size: .9rem; }
+  .mood-desc { color: var(--muted); font-size: .72rem; margin-top: .2rem; }
+
+  /* ── SLIDERS ── */
+  .sliders-row {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1rem; margin-bottom: 2.5rem;
+  }
+  @media (max-width: 500px) { .sliders-row { grid-template-columns: 1fr; } }
+
+  .slider-group label {
+    display: flex; justify-content: space-between;
+    font-size: .82rem; margin-bottom: .5rem;
+  }
+  .slider-group label span { font-family: 'Syne Mono', monospace; color: var(--accent); }
+  input[type=range] {
+    width: 100%; appearance: none;
+    height: 4px; border-radius: 2px;
+    background: var(--border); outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    appearance: none; width: 16px; height: 16px;
+    border-radius: 50%; background: var(--accent); cursor: pointer;
+    transition: transform .15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+
+  /* ── SEARCH SEEDS ── */
+  .seed-row { display: flex; gap: .6rem; margin-bottom: .75rem; }
+  .seed-input {
+    flex: 1; background: var(--surface);
+    border: 1px solid var(--border); border-radius: .75rem;
+    padding: .6rem 1rem; color: var(--text);
+    font-family: 'Syne', sans-serif; font-size: .9rem;
+    transition: border-color .2s; outline: none;
+  }
+  .seed-input:focus { border-color: var(--accent); }
+  .seed-tags { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 2rem; }
+  .seed-tag {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 2rem; padding: .3rem .9rem;
+    font-size: .8rem; display: flex; align-items: center; gap: .5rem;
+  }
+  .seed-tag button {
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: .8rem; padding: 0; line-height: 1;
+  }
+  .seed-tag button:hover { color: var(--accent2); }
+
+  /* ── GENERATE BTN ── */
+  .generate-btn {
+    width: 100%; padding: 1rem;
+    background: var(--accent);
+    color: #000; font-family: 'Syne', sans-serif;
+    font-weight: 800; font-size: 1rem;
+    border: none; border-radius: 1rem;
+    cursor: pointer; letter-spacing: .02em;
+    transition: all .2s;
+    position: relative; overflow: hidden;
+  }
+  .generate-btn:hover { background: #1ed760; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(29,185,84,.25); }
+  .generate-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  /* ── RESULTS ── */
+  #results { margin-top: 3rem; }
+  .results-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+  .results-title { font-size: 1.3rem; font-weight: 800; }
+  .save-btn {
+    background: none; border: 1px solid var(--accent);
+    color: var(--accent); padding: .5rem 1.2rem;
+    border-radius: .75rem; cursor: pointer;
+    font-family: 'Syne', sans-serif; font-weight: 700;
+    font-size: .85rem; transition: all .2s;
+  }
+  .save-btn:hover { background: var(--accent); color: #000; }
+
+  .track-list { display: flex; flex-direction: column; gap: .5rem; }
+  .track-item {
+    display: flex; align-items: center; gap: 1rem;
+    padding: .75rem 1rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: .75rem;
+    animation: slideIn .4s both;
+    transition: border-color .2s;
+  }
+  .track-item:hover { border-color: var(--border); background: #181824; }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-16px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .track-num { width: 24px; text-align: right; color: var(--muted); font-family: 'Syne Mono', monospace; font-size: .8rem; flex-shrink: 0; }
+  .track-art { width: 44px; height: 44px; border-radius: .4rem; object-fit: cover; background: var(--border); flex-shrink: 0; }
+  .track-info { flex: 1; min-width: 0; }
+  .track-name { font-weight: 700; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-artist { color: var(--muted); font-size: .78rem; }
+  .track-duration { color: var(--muted); font-family: 'Syne Mono', monospace; font-size: .78rem; flex-shrink: 0; }
+  .track-link { color: var(--accent); text-decoration: none; font-size: 1rem; flex-shrink: 0; }
+  .track-link:hover { opacity: .75; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(2rem);
+    background: var(--surface); border: 1px solid var(--border);
+    padding: .75rem 1.5rem; border-radius: .75rem;
+    font-size: .88rem; opacity: 0; transition: all .3s;
+    z-index: 1000; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--accent); color: var(--accent); }
+  .toast.error { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ── SETUP PANEL ── */
+  .setup-panel {
+    max-width: 600px; margin: 2rem auto;
+    padding: 2rem; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 1.5rem;
+  }
+  .setup-panel h3 { margin-bottom: 1rem; }
+  .setup-panel p { color: var(--muted); font-size: .88rem; line-height: 1.6; margin-bottom: 1rem; }
+  .input-field {
+    width: 100%; background: var(--bg);
+    border: 1px solid var(--border); border-radius: .75rem;
+    padding: .65rem 1rem; color: var(--text);
+    font-family: 'Syne Mono', monospace; font-size: .85rem;
+    margin-bottom: .75rem; outline: none;
+    transition: border-color .2s;
+  }
+  .input-field:focus { border-color: var(--accent); }
+  .code-block {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: .75rem; padding: 1rem;
+    font-family: 'Syne Mono', monospace; font-size: .78rem;
+    color: #a8ff78; line-height: 1.7; overflow-x: auto;
+    margin-bottom: 1rem; white-space: pre;
+  }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .7rem 1.4rem; border-radius: .75rem;
+    font-family: 'Syne', sans-serif; font-weight: 700;
+    font-size: .88rem; cursor: pointer; transition: all .2s;
+    text-decoration: none;
+  }
+  .btn-primary { background: var(--accent); color: #000; border: none; }
+  .btn-primary:hover { background: #1ed760; }
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  .spinner {
+    display: inline-block; width: 18px; height: 18px;
+    border: 2px solid rgba(0,0,0,.3); border-top-color: #000;
+    border-radius: 50%; animation: spin .6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MOODWAVE</div>
+  <div class="tagline">Mood → Music · Powered by Spotify</div>
+</header>
+
+<!-- ── SETUP / AUTH ── -->
+<div id="setup-section">
+  <div class="setup-panel">
+    <h3>🎵 Connect to Spotify</h3>
+    <p>To use MOODWAVE you need a <strong>Spotify Developer App</strong>. Here's a quick setup:</p>
+    <ol style="color:var(--muted);font-size:.85rem;line-height:2;padding-left:1.2rem;margin-bottom:1rem;">
+      <li>Go to <a href="https://developer.spotify.com/dashboard" target="_blank" style="color:var(--accent)">developer.spotify.com/dashboard</a> and create an app.</li>
+      <li>Set the Redirect URI to exactly: <code style="color:#a8ff78;background:var(--bg);padding:.1rem .4rem;border-radius:.3rem;">http://localhost:8080/callback</code> <em>(or wherever you serve this file)</em>.</li>
+      <li>Copy your <strong>Client ID</strong> and paste it below.</li>
+    </ol>
+    <input class="input-field" id="client-id-input" placeholder="Paste your Spotify Client ID here…">
+    <p style="margin-top:.25rem;font-size:.78rem;">Your redirect URI (update if needed):</p>
+    <input class="input-field" id="redirect-uri-input" value="">
+    <button class="btn btn-primary" onclick="startAuth()" style="width:100%;justify-content:center;margin-top:.5rem;">
+      Connect with Spotify
+    </button>
+    <hr class="divider">
+    <p style="font-size:.78rem;">The app uses <strong>PKCE OAuth</strong> — your credentials never leave the browser.</p>
+  </div>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div id="app-section">
+  <div class="user-bar">
+    <img id="user-avatar" class="user-avatar" src="" alt="">
+    <div>
+      <div class="user-name" id="user-name">—</div>
+      <div class="user-sub" id="user-product">Spotify</div>
+    </div>
+    <button class="logout-btn" onclick="logout()">Disconnect</button>
+  </div>
+
+  <!-- STEP 1: MOOD -->
+  <div class="step-label">Step 01 — Pick your mood</div>
+  <div class="mood-grid" id="mood-grid"></div>
+
+  <!-- STEP 2: TUNE -->
+  <div class="step-label">Step 02 — Fine-tune the vibe</div>
+  <div class="sliders-row">
+    <div class="slider-group">
+      <label>Energy <span id="energy-val">0.7</span></label>
+      <input type="range" id="energy" min="0" max="1" step="0.05" value="0.7">
+    </div>
+    <div class="slider-group">
+      <label>Danceability <span id="dance-val">0.6</span></label>
+      <input type="range" id="danceability" min="0" max="1" step="0.05" value="0.6">
+    </div>
+    <div class="slider-group">
+      <label>Acousticness <span id="acoustic-val">0.3</span></label>
+      <input type="range" id="acousticness" min="0" max="1" step="0.05" value="0.3">
+    </div>
+    <div class="slider-group">
+      <label>Valence (positivity) <span id="valence-val">0.5</span></label>
+      <input type="range" id="valence" min="0" max="1" step="0.05" value="0.5">
+    </div>
+  </div>
+
+  <!-- STEP 3: SEEDS -->
+  <div class="step-label">Step 03 — Seed genres / artists (optional, max 5)</div>
+  <div class="seed-row">
+    <input class="seed-input" id="seed-input" placeholder="e.g. indie pop, The Weeknd, jazz…" maxlength="60">
+    <button class="btn btn-outline" onclick="addSeed()">Add</button>
+  </div>
+  <div class="seed-tags" id="seed-tags"></div>
+
+  <!-- GENERATE -->
+  <button class="generate-btn" id="gen-btn" onclick="generate()">
+    Generate Playlist
+  </button>
+  <button class="generate-btn" id="test-btn" onclick="testSearch()" style="margin-top:.5rem;background:#333;color:#fff;font-size:.8rem;padding:.6rem;">
+    🔍 Test API Connection
+  </button>
+  <div id="test-output" style="margin-top:.75rem;font-family:monospace;font-size:.78rem;color:#a8ff78;background:#0a0a0f;padding:1rem;border-radius:.75rem;display:none;white-space:pre-wrap;word-break:break-all;"></div>
+
+  <!-- RESULTS -->
+  <div id="results" style="display:none">
+    <div class="results-header">
+      <div class="results-title" id="results-title">Your Playlist</div>
+      <button class="save-btn" id="save-btn" onclick="savePlaylist()">Save to Spotify</button>
+    </div>
+    <div class="track-list" id="track-list"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ────────────────────────────────────────────────
+//  CONFIG
+// ────────────────────────────────────────────────
+const SCOPES = [
+  'user-read-private','user-read-email',
+  'playlist-modify-public','playlist-modify-private'
+].join(' ');
+
+const MOODS = [
+  { id:'happy',    label:'Happy',    icon:'😄', desc:'Uplifting & bright',    energy:.8,  dance:.75, valence:.85, acoustic:.15 },
+  { id:'chill',    label:'Chill',    icon:'😌', desc:'Relaxed & mellow',      energy:.3,  dance:.4,  valence:.6,  acoustic:.5  },
+  { id:'sad',      label:'Sad',      icon:'😢', desc:'Emotional & reflective',energy:.25, dance:.25, valence:.2,  acoustic:.65 },
+  { id:'hype',     label:'Hype',     icon:'🔥', desc:'Loud & pumped up',      energy:.95, dance:.9,  valence:.8,  acoustic:.05 },
+  { id:'focus',    label:'Focus',    icon:'🧠', desc:'Deep work mode',        energy:.45, dance:.35, valence:.45, acoustic:.4  },
+  { id:'romantic', label:'Romantic', icon:'💕', desc:'Warm & intimate',       energy:.4,  dance:.5,  valence:.65, acoustic:.55 },
+];
+
+const MOOD_COLORS = {
+  happy:'#f7c948', chill:'#5ce1e6', sad:'#8b9fcf',
+  hype:'#ff6b6b', focus:'#a8ff78', romantic:'#ff85c2'
+};
+
+// ── STATE
+let accessToken = null;
+let selectedMood = null;
+let seeds = [];
+let lastTracks = [];
+let clientId = '';
+let redirectUri = window.location.origin + window.location.pathname;
+
+// ── INIT
+window.addEventListener('load', () => {
+  document.getElementById('redirect-uri-input').value = redirectUri;
+
+  // Handle OAuth callback
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (code) {
+    handleCallback(code);
+    return;
+  }
+
+  // Already have token?
+  const stored = sessionStorage.getItem('mw_token');
+  if (stored) {
+    accessToken = stored;
+    showApp();
+    return;
+  }
+
+  // Restore clientId
+  const cid = sessionStorage.getItem('mw_cid');
+  if (cid) document.getElementById('client-id-input').value = cid;
+
+  document.getElementById('setup-section').style.display = 'block';
+  document.getElementById('app-section').style.display = 'none';
+});
+
+// ────────────────────────────────────────────────
+//  PKCE HELPERS
+// ────────────────────────────────────────────────
+function base64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+async function generateCodeVerifier() {
+  const arr = new Uint8Array(64);
+  crypto.getRandomValues(arr);
+  return base64url(arr);
+}
+async function generateCodeChallenge(verifier) {
+  const enc = new TextEncoder().encode(verifier);
+  const hash = await crypto.subtle.digest('SHA-256', enc);
+  return base64url(hash);
+}
+
+// ────────────────────────────────────────────────
+//  AUTH
+// ────────────────────────────────────────────────
+async function startAuth() {
+  clientId = document.getElementById('client-id-input').value.trim();
+  redirectUri = document.getElementById('redirect-uri-input').value.trim();
+  if (!clientId) { showToast('Please enter your Client ID', 'error'); return; }
+
+  sessionStorage.setItem('mw_cid', clientId);
+  sessionStorage.setItem('mw_redirect', redirectUri);
+
+  const verifier = await generateCodeVerifier();
+  const challenge = await generateCodeChallenge(verifier);
+  sessionStorage.setItem('mw_verifier', verifier);
+
+  const url = new URL('https://accounts.spotify.com/authorize');
+  url.searchParams.set('response_type','code');
+  url.searchParams.set('client_id', clientId);
+  url.searchParams.set('scope', SCOPES);
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('code_challenge_method','S256');
+  url.searchParams.set('code_challenge', challenge);
+
+  window.location.href = url.toString();
+}
+
+async function handleCallback(code) {
+  const verifier = sessionStorage.getItem('mw_verifier');
+  const cid = sessionStorage.getItem('mw_cid');
+  const redir = sessionStorage.getItem('mw_redirect') || redirectUri;
+
+  const resp = await fetch('https://accounts.spotify.com/api/token', {
+    method:'POST',
+    headers: { 'Content-Type':'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      code, redirect_uri: redir,
+      client_id: cid,
+      code_verifier: verifier
+    })
+  });
+  const data = await resp.json();
+  if (data.access_token) {
+    accessToken = data.access_token;
+    sessionStorage.setItem('mw_token', accessToken);
+    // clean URL
+    window.history.replaceState({}, document.title, window.location.pathname);
+    showApp();
+  } else {
+    showToast('Auth failed: ' + (data.error_description || data.error), 'error');
+    document.getElementById('setup-section').style.display = 'block';
+  }
+}
+
+function logout() {
+  sessionStorage.clear();
+  accessToken = null;
+  document.getElementById('setup-section').style.display = 'block';
+  document.getElementById('app-section').style.display = 'none';
+}
+
+// ────────────────────────────────────────────────
+//  SHOW APP
+// ────────────────────────────────────────────────
+async function showApp() {
+  document.getElementById('setup-section').style.display = 'none';
+  document.getElementById('app-section').style.display = 'block';
+
+  // fetch user
+  try {
+    const u = await spotifyGet('/me');
+    document.getElementById('user-name').textContent = u.display_name || u.id;
+    document.getElementById('user-product').textContent = u.product === 'premium' ? '✦ Premium' : 'Free';
+    if (u.images?.[0]?.url) document.getElementById('user-avatar').src = u.images[0].url;
+  } catch(e) { /* ignore */ }
+
+  buildMoodGrid();
+  bindSliders();
+}
+
+// ── MOOD GRID
+function buildMoodGrid() {
+  const grid = document.getElementById('mood-grid');
+  grid.innerHTML = '';
+  MOODS.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'mood-card';
+    card.style.setProperty('--mood-color', MOOD_COLORS[m.id]);
+    card.innerHTML = `<div class="mood-icon">${m.icon}</div><div class="mood-name">${m.label}</div><div class="mood-desc">${m.desc}</div>`;
+    card.onclick = () => selectMood(m, card);
+    grid.appendChild(card);
+  });
+}
+
+function selectMood(m, card) {
+  document.querySelectorAll('.mood-card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  selectedMood = m;
+  // Apply mood presets to sliders
+  document.getElementById('energy').value       = m.energy;
+  document.getElementById('danceability').value = m.dance;
+  document.getElementById('valence').value      = m.valence;
+  document.getElementById('acousticness').value = m.acoustic;
+  updateSliderLabels();
+}
+
+// ── SLIDERS
+function bindSliders() {
+  ['energy','danceability','acousticness','valence'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateSliderLabels);
+  });
+}
+function updateSliderLabels() {
+  document.getElementById('energy-val').textContent    = parseFloat(document.getElementById('energy').value).toFixed(2);
+  document.getElementById('dance-val').textContent     = parseFloat(document.getElementById('danceability').value).toFixed(2);
+  document.getElementById('acoustic-val').textContent  = parseFloat(document.getElementById('acousticness').value).toFixed(2);
+  document.getElementById('valence-val').textContent   = parseFloat(document.getElementById('valence').value).toFixed(2);
+}
+
+// ── SEEDS
+function addSeed() {
+  const inp = document.getElementById('seed-input');
+  const val = inp.value.trim();
+  if (!val || seeds.length >= 5) return;
+  if (seeds.includes(val)) { inp.value=''; return; }
+  seeds.push(val);
+  inp.value = '';
+  renderSeeds();
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement.id === 'seed-input') addSeed();
+});
+function renderSeeds() {
+  const cont = document.getElementById('seed-tags');
+  cont.innerHTML = '';
+  seeds.forEach((s,i) => {
+    const tag = document.createElement('div');
+    tag.className = 'seed-tag';
+    tag.innerHTML = `${s} <button onclick="removeSeed(${i})">✕</button>`;
+    cont.appendChild(tag);
+  });
+}
+function removeSeed(i) { seeds.splice(i,1); renderSeeds(); }
+
+// ────────────────────────────────────────────────
+//  GENERATE  (search-based, no /recommendations)
+// ────────────────────────────────────────────────
+async function generate() {
+  if (!selectedMood) { showToast('Pick a mood first 👆', 'error'); return; }
+
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generating…';
+
+  try {
+    // Simple keyword queries that reliably return results
+    const MOOD_QUERIES = {
+      happy:    ['happy pop', 'feel good pop', 'upbeat indie', 'summer hits'],
+      chill:    ['chill beats', 'lo-fi chill', 'relaxing indie', 'mellow vibes'],
+      sad:      ['sad songs', 'emotional acoustic', 'heartbreak songs', 'sad indie'],
+      hype:     ['hip hop hype', 'edm party', 'trap banger', 'workout rap'],
+      focus:    ['instrumental focus', 'classical study', 'ambient focus', 'lo-fi study'],
+      romantic: ['romantic songs', 'love songs', 'slow dance', 'soul love'],
+    };
+
+    const queries = MOOD_QUERIES[selectedMood.id] || ['pop hits'];
+    const seedQueries = seeds.slice();
+    const allQueries = [...seedQueries, ...queries];
+
+    const seenIds = new Set();
+    let allTracks = [];
+    const errors = [];
+
+    for (const q of allQueries) {
+      if (allTracks.length >= 40) break;
+      try {
+        const offset = Math.floor(Math.random() * 4) * 10;
+        const data = await spotifyGet(
+          '/search?q=' + encodeURIComponent(q) + '&type=track&limit=10&offset=' + offset + '&market=from_token'
+        );
+        const tracks = (data.tracks && data.tracks.items) ? data.tracks.items : [];
+        for (const t of tracks) {
+          if (t && t.id && !seenIds.has(t.id)) {
+            seenIds.add(t.id);
+            allTracks.push(t);
+          }
+        }
+      } catch(e) {
+        errors.push(q + ': ' + e.message);
+        console.warn('Search failed:', q, e.message);
+      }
+    }
+
+    if (errors.length) console.log('Search errors:', errors);
+
+    allTracks = allTracks.sort(() => Math.random() - 0.5).slice(0, 20);
+    lastTracks = allTracks;
+
+    if (!lastTracks.length) {
+      const errDetail = errors.length ? ' (errors: ' + errors[0] + ')' : '';
+      showToast('No tracks found' + errDetail, 'error');
+      return;
+    }
+
+    renderTracks(lastTracks);
+    document.getElementById('results-title').textContent =
+      selectedMood.icon + ' ' + selectedMood.label + ' Playlist — ' + lastTracks.length + ' tracks';
+
+    showToast('Playlist ready! 🎧', 'success');
+  } catch(e) {
+    console.error('Generate error:', e);
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Playlist';
+  }
+}
+
+// ── TEST
+async function testSearch() {
+  const out = document.getElementById('test-output');
+  out.style.display = 'block';
+  out.textContent = 'Testing…';
+  try {
+    // Test 1: token works
+    const me = await spotifyGet('/me');
+    out.textContent = '✅ Token OK: ' + me.display_name + '\n';
+    // Test 2: simple search
+    const r = await fetch('https://api.spotify.com/v1/search?q=pop&type=track&limit=3', {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const txt = await r.text();
+    out.textContent += '\nSearch status: ' + r.status + '\n';
+    try {
+      const j = JSON.parse(txt);
+      const items = j.tracks && j.tracks.items;
+      if (items && items.length) {
+        out.textContent += '✅ Search works! Got ' + items.length + ' tracks\n';
+        out.textContent += 'First track: ' + items[0].name + ' by ' + items[0].artists[0].name;
+      } else {
+        out.textContent += '⚠️ Search returned 0 tracks\n';
+        out.textContent += 'Response: ' + txt.substring(0, 300);
+      }
+    } catch(pe) {
+      out.textContent += 'Response (not JSON): ' + txt.substring(0, 300);
+    }
+  } catch(e) {
+    out.textContent = '❌ Error: ' + e.message;
+  }
+}
+
+// ── RENDER TRACKS
+function renderTracks(tracks) {
+  const list = document.getElementById('track-list');
+  list.innerHTML = '';
+  document.getElementById('results').style.display = 'block';
+
+  tracks.forEach((t,i) => {
+    const art = t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || '';
+    const dur = msToTime(t.duration_ms);
+    const item = document.createElement('div');
+    item.className = 'track-item';
+    item.style.animationDelay = `${i*40}ms`;
+    item.innerHTML = `
+      <span class="track-num">${i+1}</span>
+      <img class="track-art" src="${art}" alt="">
+      <div class="track-info">
+        <div class="track-name">${esc(t.name)}</div>
+        <div class="track-artist">${esc(t.artists.map(a=>a.name).join(', '))}</div>
+      </div>
+      <span class="track-duration">${dur}</span>
+      <a class="track-link" href="${t.external_urls.spotify}" target="_blank" title="Open in Spotify">↗</a>
+    `;
+    list.appendChild(item);
+  });
+}
+
+// ── SAVE TO SPOTIFY
+async function savePlaylist() {
+  if (!lastTracks.length) return;
+  const btn = document.getElementById('save-btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  try {
+    const me = await spotifyGet('/me');
+    const name = `${selectedMood.icon} ${selectedMood.label} — MOODWAVE`;
+    const pl = await spotifyPost(`/users/${me.id}/playlists`, {
+      name, description: `Generated by MOODWAVE • ${new Date().toLocaleDateString()}`,
+      public: false
+    });
+    await spotifyPost(`/playlists/${pl.id}/tracks`, {
+      uris: lastTracks.map(t => t.uri)
+    });
+    showToast(`"${name}" saved to Spotify! ✅`, 'success');
+    btn.textContent = '✅ Saved!';
+  } catch(e) {
+    showToast('Save failed: ' + e.message, 'error');
+    btn.textContent = 'Save to Spotify';
+    btn.disabled = false;
+  }
+}
+
+// ────────────────────────────────────────────────
+//  SPOTIFY API HELPERS
+// ────────────────────────────────────────────────
+async function spotifyGet(path) {
+  const r = await fetch('https://api.spotify.com/v1' + path, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  if (r.status === 401) { logout(); throw new Error('Session expired — please reconnect'); }
+  if (!r.ok) throw new Error(`Spotify ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+async function spotifyPost(path, body) {
+  const r = await fetch('https://api.spotify.com/v1' + path, {
+    method:'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type':'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(`Spotify ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+// ────────────────────────────────────────────────
+//  UTILS
+// ────────────────────────────────────────────────
+function msToTime(ms) {
+  const s = Math.floor(ms/1000), m = Math.floor(s/60);
+  return `${m}:${String(s%60).padStart(2,'0')}`;
+}
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+let toastTimer;
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
